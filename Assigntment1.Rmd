@@ -1,0 +1,66 @@
+---
+title: "Assignment1"
+author: "Semyon Toybis"
+output: html_document
+date: "2024-01-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## #Introduction
+
+The following document examines the data that is associated with the FiveThiryEight Article titled ["Congress Today Is Older Than It's Ever Been"](https://fivethirtyeight.com/features/aging-congress-boomers/).
+
+The article discuses how the median age of congressional representatives in the United States has steadily increased over time and is currently at the highest level since the data set began.
+
+# Importing the data
+
+The below code imports the data from the FiveThirtyEight Github repo into a dataframe
+
+```{r}
+library(tidyverse)
+library(readr)
+
+fileURL = 'https://raw.githubusercontent.com/fivethirtyeight/data/master/congress-demographics/data_aging_congress.csv'
+
+congressData = read.csv((url(fileURL)))
+
+```
+
+# Sub setting the dataframe
+
+The FiveThirtyEight Github provides a description of the columns. The "congress" column indicates which session of Congress the observation refers to.
+
+We will select the following columns: congress, chamber, state, bioname, bioguide_id, birthday, cmltv_cong, cmltv_chamber, age_years, generation. We will select all the columns except for start_date, party_code, age_days. The columns all have meaningful names, so there is no need to rename columns.
+
+```{r}
+subsetCongressData <- subset(congressData, select = -c(start_date,party_code,age_days))
+```
+
+# Looking at NY Data
+
+Since I live in NY State, I am curious to filter this data for congressional representatives for the state of NY
+
+```{r}
+nySubset <- filter(subsetCongressData, state_abbrev == "NY")
+```
+
+# Comparing the age distribution for the first congressional class and the most recent
+
+Let's compare the distribution of ages of NY state representatives in the first congressional data set in the sample and the most recent. We can plot the age distribution in a box and whisker plot.
+
+```{r}
+nySubSetFirstandLast <- filter(nySubset, congress == 66 | congress == 118)
+nySubSetFirstandLast$congress <- factor(nySubSetFirstandLast$congress)
+
+ggplot(data = nySubSetFirstandLast, mapping = aes(x = congress, y = age_years, color = chamber)) +
+  geom_boxplot() +
+  labs(
+    title = "Age Distribution for first and last congressional class in NY") 
+```
+
+# Conclusion
+
+The FiveThirtyEight article detailed how the median age of congressional members today is higher than its ever been in history. When comparing NY State's age distribution for its first congressional class in the data set and its most recent, we see that the age distribution for the Senate is meaningfully higher. While the media age for House members is slightly lower, the distribution is more skewed towards older members. Further analysis for NY state can consider the change in median age for NY state representatives over time and compare it to the media age for all NY residents.
