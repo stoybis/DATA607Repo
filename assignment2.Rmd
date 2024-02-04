@@ -1,0 +1,56 @@
+---
+title: "Assignment2"
+author: "Semyon Toybis"
+output: html_document
+date: "2024-02-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## About the data in the database
+
+As part of this assignment, I created hypothetical movie ratings for six different movies from five different friends and purposefully included a few missing values. This data was created in a SQL script and stored in the MySQL database for this class.
+
+I created three tables: movies, friends, and movieratings. Movies has primary keys for each of the six movies and friends has primary keys for each of the five friends. The movieratings table is relational table that uses the primary keys from movies and friends to store each friend's movie rating.
+
+# Loading data from the database to R
+
+Below we connect to the MySQL database and pull the movieratings table into a dataframe. We use the SQL query to pull names for friends and movies (rather than IDs) in the movie ratings table.
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(RMySQL)
+
+sqlconnection = dbConnect(RMySQL::MySQL(),
+                            dbname='semyon.toybis43',
+                            host='cunydata607sql.mysql.database.azure.com',
+                            port=3306,
+                            user='semyon.toybis43',
+                            password='Data607')
+
+query = dbSendQuery(sqlconnection, "SELECT Friends.FriendName AS FriendName, Movies.MovieName AS MovieName, MovieRatings.Rating
+FROM MovieRatings
+JOIN Friends ON MovieRatings.FriendID = Friends.FriendID
+JOIN Movies ON MovieRatings.MovieID = Movies.MovieID;")
+
+movieRatingsDF = fetch(query)
+```
+
+# Exploratory data analysis
+
+Below we create some basic plots to explore the data in the data frame. NA values are automatically dropped from the calculations and chart.
+
+```{r}
+
+avgRatingDF = aggregate(Rating ~ MovieName, data=movieRatingsDF, mean)
+avgRatingDF$MovieName = as.factor(avgRatingDF$MovieName)
+
+
+ggplot(avgRatingDF, aes(x = reorder(MovieName, Rating), y = Rating)) +
+  geom_bar(stat = 'identity') +
+  labs(title = "Average Movie Rating", x = "Movie", y = "Average Rating")
+
+```
