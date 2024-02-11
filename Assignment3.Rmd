@@ -1,0 +1,119 @@
+---
+title: "Assignment3"
+output: html_document
+date: "2024-02-09"
+author: "Semyon Toybis"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 1
+
+We are examining the list of college majors from the FiveThiryEight article [The Economic Guide To Picking A College Major](https://fivethirtyeight.com/features/the-economic-guide-to-picking-a-college-major/).
+
+Below we import the data from the FiveThirtyEight Github
+
+```{r cars}
+
+library(tidyverse)
+library(readr)
+
+fileURL = 'https://raw.githubusercontent.com/fivethirtyeight/data/master/college-majors/majors-list.csv'
+
+majorsDF = read.csv((url(fileURL)))
+```
+
+We are interested in finding majors that contain the phrases "DATA" or "STATISTICS"
+
+```{r}
+
+majorsOfInterest <- grep("DATA|STATISTICS", majorsDF$Major, value = TRUE, ignore.case = FALSE)
+
+print(majorsOfInterest)
+```
+
+# Question 2
+
+We are interested in transforming the below vector into one line of output that is separated by commas
+
+```{r}
+
+foodVector <- c("bell pepper", "bilberry", "blackberry", "blood orange", "blueberry", "cantaloupe", "chili pepper", "cloudberry", "elderberry", "lime", "lychee", "mulberry", "olive", "salal berry")
+
+str_flatten_comma(foodVector)
+```
+
+# Question 3
+
+Describe, in words, what these expressions will match:
+
+-   (.)\\1\\1
+
+    -   find a string that has the same charter three times in a row
+
+    -   none of the strings in fruit or words fill the requirement
+
+        ```{r}
+        str_view(fruit, "(.)\\1\\1")
+        str_view(words, "(.)\\1\\1")
+
+        str_view(c('abbba', 'goooal', 'ball'), "(.)\\1\\1") # returns only 'abbba' and 'goooal' with the repeating characters highlighted
+        ```
+
+-   "(.)(.)\\\\2\\\\1"
+
+    -   find a string that has two characters followed by the same two characters but in reverse order
+
+        ```{r}
+        str_view(words, "(.)(.)\\2\\1")
+        ```
+
+-   (..)\\1
+
+    -   find a string that has the same two characters repeating
+
+        ```{r}
+        str_view(words,"(..)\\1")
+        str_view(fruit,"(..)\\1")
+        ```
+
+-   "(.).\\\\1.\\\\1"
+
+    -   find a string that has a character, followed by a different character, followed by the original character, followed by a different character, followed by the original character
+
+        ```{r}
+        str_view(words,"(.).\\1.\\1")
+        str_view(fruit,"(.).\\1.\\1")
+        ```
+
+-   "(.)(.)(.).\*\\\\3\\\\2\\\\1"
+
+    -   finds a string where there are three characters followed by any set of characters followed by the aforementioned three characters in reverse order
+
+        ```{r}
+        str_view(words,"(.)(.)(.).*\\3\\2\\1")
+        ```
+
+# Question 4
+
+Construct regular expressions to match words that:
+
+-   Start and end with the same character.
+
+    ```{r}
+    str_view(words, "^(.).*\\1$")
+    ```
+
+-   Contain a repeated pair of letters (e.g. "church" contains "ch" repeated twice.)
+
+    ```{r}
+    str_view(words, "(..).*\\1")
+    ```
+
+-   Contain one letter repeated in at least three places (e.g. "eleven" contains three "e"s.)
+
+    ```{r}
+    str_view(words, "(.).*\\1.*\\1")
+    ```
