@@ -1,0 +1,321 @@
+---
+title: "Project1"
+output: html_document
+date: "2024-02-17"
+author: "Semyon Toybis"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Objective
+
+The goal of the assignment is to read data from a text file that has information on chess players and their performance in a tournament, create a data frame that has five specified columns, and write that data frame to a csv file.
+
+The five columns are: Player Name, Player State, Total Points, Player Pre Rating, Average Opponent Pre Rating
+
+## Reading the Data
+
+I copied the text file to my Github repo and then pulled the text file from the repo to allow for recreation of the code. I squished the text file to remove any unnecessary spaces.
+
+```{r}
+library(tidyverse)
+library(readr)
+
+fileURL <- 'https://raw.githubusercontent.com/stoybis/DATA607Repo/main/tournamentinfo.txt'
+
+txtFileData <- read_lines(url(fileURL), skip = 3)
+txtFileDataSquished <- str_squish(txtFileData)
+
+remove(txtFileData) #drop the original text file since I'll be working with the squished file
+
+head(txtFileDataSquished, n=10)
+
+```
+
+## Extracting player names
+
+I use regex to extract player names. I first search for the pattern that starts with a space, followed by a \|, followed by a space, followed by letters, followed by a space, followed by a \|, followed by a digit to capture the the name surrounded by \| and the digit after it.
+
+```{r}
+playerName <- str_view(txtFileDataSquished, "\\s\\|\\s[a-zA-Z].*\\s\\|\\d")
+
+head(playerName)
+```
+
+From this vector, I extract the \\, followed by anything that is not a number, followed by a space and a \|
+
+```{r}
+playerName <- str_extract(playerName, "\\|\\s[^0-9]+\\s\\|")
+
+head(playerName)
+```
+
+Last, I extract everything that is not a \| and trim white spaces. This now has 64 clean names
+
+```{r}
+playerName <- str_extract(playerName, "\\s.*\\s")
+playerName <-str_trim(playerName) # this has 64 clean names
+
+head(playerName, n=10)
+```
+
+## Extracting States
+
+I use regex to identify the pattern that starts with a letter followed by any character followed by a space, which is how every line that starts with the State starts.
+
+```{r}
+playerStates <-str_view(txtFileDataSquished, "^[A-Z].\\s")
+
+head(playerStates)
+```
+
+From this, I extract the the first two letters
+
+```{r}
+playerStates <-str_extract(playerStates, "[A-Z][A-Z]\\s")
+
+head(playerStates)
+```
+
+## Create a data frame and start adding data to it
+
+I combine the playerName vector and PlayerStates vector into a data frame
+
+```{r}
+cleanedData <- data.frame(playerName, playerStates)
+
+head(cleanedData)
+```
+
+## Extracting total points
+
+I use regex to identify the pattern that starts with a letter, followed by a space and \|, followed by a digit, a period and a digit
+
+```{r}
+playerTotalPoints <-str_view(txtFileDataSquished, "[A-Z]\\s\\|\\d.\\d")
+
+head(playerTotalPoints)
+```
+
+From this, I extract the two digits.
+
+```{r}
+playerTotalPoints <- as.numeric(str_extract(playerTotalPoints, "\\d.\\d"))
+
+head(playerTotalPoints)
+```
+
+I then add this to the data frame as a new column
+
+```{r}
+cleanedData <- mutate(cleanedData, playerTotalPoints)
+
+head(cleanedData)
+```
+
+## Extracting pre-rating
+
+I use regex to identify the pattern that starts with a : followed by a space then any characters followed by a -, which captures the pre-rating and the characters surrounding it. Note that some pre-ratings have a letter followed by two digits after it.
+
+```{r}
+preRating <- str_view(txtFileDataSquished, ":\\s.*\\-")
+
+head(preRating, n=10)
+```
+
+I extract the pre-rating using regex
+
+```{r}
+preRating <- str_extract(preRating, ":.*-")
+
+head(preRating, n=10)
+```
+
+I then remove the : and - using regex. This still captures the letter and the two digits after it which some players have.
+
+```{r}
+preRating <- str_extract(preRating,"\\d.*\\d")
+
+head(preRating, n=10)
+```
+
+Last, I capture the first four digits only.
+
+```{r}
+preRating <- str_extract(preRating, "\\d{3,4}")
+
+head(preRating, n=10)
+```
+
+I add the pre-rating to the data frame
+
+```{r}
+cleanedData <- mutate(cleanedData, preRating)
+
+head(cleanedData)
+```
+
+## Clean the data frame
+
+I add an ID column using the row names which corresponds to the position of the player in the original order of players in the text file. I will later use this to merge data. Furthermore, I convert the ID, total points, and pre–rating to type numeric
+
+```{r}
+cleanedData <- rownames_to_column(cleanedData, "ID")
+colsToConvert <- names(cleanedData[c(1,4,5)])
+cleanedData[colsToConvert] <- lapply(cleanedData[colsToConvert], as.numeric)
+
+head(cleanedData)
+```
+
+## Getting each player's opponents
+
+I use regex to remove letters as we know opponent numbers don't have letters
+
+```{r}
+noletters <- str_remove_all(txtFileDataSquished, "[A-Z]")
+
+head(noletters)
+```
+
+I then search for lines that start with a digit followed by any characters and then ending with a \|. This captures the line of the text file that has the player ID, total points, and their opponents.
+
+```{r}
+noletters <- str_view(noletters, "^\\d.*\\|")
+
+head(noletters)
+```
+
+I then use str_split to split the vector based on \| and use simplify = True to create a matrix
+
+```{r}
+
+playerandOppsMatrix <- str_split(noletters,"\\|", simplify = TRUE)
+
+head(playerandOppsMatrix)
+```
+
+I then drop the first, second and last column to capture the total points and the list of opponents for each round. I add column names
+
+```{r}
+
+playerandOppsMatrix <- subset(playerandOppsMatrix, select = -c(1,2,11)) 
+colnames(playerandOppsMatrix) <- c('TotalPts', 'R1_opp', 'R2_opp', 'R3_opp',
+                                   'R4_opp', 'R5_opp', 'R6_opp',
+                                   'R7_opp')
+
+head(playerandOppsMatrix)
+```
+
+## Merging the two data sets thus far
+
+I convert the matrix to a dataframe and add a column of row names to correspond to the player ID, similar to above. I also convert ID and points to type numeric.
+
+```{r}
+playerandOppsMatrix <- as.data.frame(playerandOppsMatrix)
+playerandOppsMatrix <- rownames_to_column(playerandOppsMatrix, "ID")
+playerandOppsMatrix$ID <- as.numeric(playerandOppsMatrix$ID)
+playerandOppsMatrix$TotalPts <- as.numeric(playerandOppsMatrix$TotalPts)
+
+head(playerandOppsMatrix)
+```
+
+Now I merge the data frame that has the player ID, total points, and list of opponents per round with the cleaned data frame I have created previously, merging by the ID column. I convert columns that have numbers into type numeric, and then move the data from first data frame (name, state, etc) to the start of the merged data frame. I drop the total points column since I already have it.
+
+```{r}
+
+mergedData <- merge(playerandOppsMatrix, cleanedData, by = 'ID')
+colsToConvert2 <- names(mergedData[3:9])
+mergedData[colsToConvert2] <- lapply(mergedData[colsToConvert2], as.numeric)
+
+
+mergedData <- relocate(mergedData, playerName, playerStates, 
+                      playerTotalPoints, preRating,
+                      .after = ID )
+
+mergedData$TotalPts <- NULL
+
+head(mergedData, n=10)
+```
+
+## Finding opponent pre-ratings
+
+The last column we need to deliver is the average of the opponents pre-ratings. We have to look up each opponent's ID and then find their pre-rating. I first want to add columns to the data frame that has the pre-rating of the opponent for each round. Once I have a column for the pre-rating of an opponent for each round, I can create a column that is the average of these aforementioned columns.
+
+To return an opponents pre-rating based on their ID, I create a function that is similar to the vlookup function in excel. In the below function, I provide the dataframe, the lookup values column (eg the column that has the IDs for round 1), the column in which to find these IDs (the ID column), and then the column to return (the pre-rating column). The function returns a vector of pre-ratings based on the IDs passed.
+
+As an example, the function should do the below for a list of IDs.
+
+```{r}
+mergedData$preRating[mergedData$R1_opp[1]==mergedData$ID]
+```
+
+Below is the function. I add an if else statement to account for NAs as some players did not have opponents in certain rounds.
+
+```{r}
+
+lookupFunction <- function(dataFrame,
+                            lookupValues, lookupColumn, returnColumn) {
+  
+  returnVector <- c() ### an empty vector 
+  
+  for (i in 1:length(dataFrame[[lookupValues]])) { 
+    
+    if (is.na(dataFrame[[lookupValues]][i])) {
+      
+      returnVector[i] <- NA
+    }
+    
+    else {
+      returnVector[i] <- dataFrame[[returnColumn]][dataFrame[[lookupValues]][i]==dataFrame[[lookupColumn]]]
+    }
+    
+    }
+  
+  
+  return(returnVector)
+}
+
+```
+
+## Creating columns that have opponent pre-ratings for each round
+
+Using the above function, I create 7 columns that have the opponent pre-rating for each round.
+
+```{r}
+
+mergedData$R1_opp_rating <- lookupFunction(mergedData, 'R1_opp', 'ID', 'preRating')
+mergedData$R2_opp_rating <- lookupFunction(mergedData, 'R2_opp', 'ID', 'preRating')
+mergedData$R3_opp_rating <- lookupFunction(mergedData, 'R3_opp', 'ID', 'preRating')
+mergedData$R4_opp_rating <- lookupFunction(mergedData, 'R4_opp', 'ID', 'preRating')
+mergedData$R5_opp_rating <- lookupFunction(mergedData, 'R5_opp', 'ID', 'preRating')
+mergedData$R6_opp_rating <- lookupFunction(mergedData, 'R6_opp', 'ID', 'preRating')
+mergedData$R7_opp_rating <- lookupFunction(mergedData, 'R7_opp', 'ID', 'preRating')
+
+
+head(mergedData)
+```
+
+## Averaging the pre-ratings
+
+Now that I have the pre-ratings of each opponent in each round, I create a column that has the average of the opponent pre-ratings.
+
+```{r}
+
+mergedData$avgOppRating <- round(rowMeans(mergedData[13:19], na.rm = TRUE))
+
+head(mergedData)
+```
+
+## Sub-setting to create the deliverable data frame and write it to CSV
+
+From the above data frame, I select the original five columns that are asked for in the deliverable and then write the data frame to a CSV file.
+
+```{r}
+finalDF <- mergedData[c(2,3,4,5,20)]
+
+head(finalDF, n=10)
+
+write.csv(finalDF, "chessTournamentInfo.csv", row.names = FALSE) #will be saved into the current working directory
+```
