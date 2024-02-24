@@ -1,0 +1,118 @@
+---
+title: "assignment4"
+author: "Semyon Toybis"
+date: "2024-02-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Importing data
+
+I created a csv file that has the data provided for the assignment and uploaded it to my github. I pull the data from github into a data frame, to allow for reproduction.
+
+```{r}
+library(tidyverse)
+library(readr)
+
+fileURL = 'https://raw.githubusercontent.com/stoybis/DATA607Repo/main/assignment4data.csv'
+
+flightData = read.csv(url(fileURL), header = TRUE)
+
+head(flightData)
+```
+
+## Cleaning the data
+
+I drop the blank third row and assign column names to the first two columns
+
+```{r}
+
+#drop blank third row
+flightData <-flightData[-3,]
+rownames(flightData) <-NULL #reset the row names
+
+#add column names to first two columns
+colnames(flightData)[1:2] <- c('airline', 'status')
+
+head(flightData)
+```
+
+I will be pivoting the data frame to a longer format. However, there are missing values in the data frame in row 2 column 1 and row 4 column 1. I fill in the blanks before pivoting.
+
+```{r}
+#fill in missing data
+flightData[2,1] <- "ALASKA"
+flightData[4,1] <- "AM WEST"
+
+head(flightData)
+```
+
+## Pivoting the data frame
+
+I want to pivot the data frame into a longer format where the columns are: airline, status, city, and count of flights.
+
+```{r}
+flightDataLong <- flightData |> pivot_longer(
+  cols = !c('airline', 'status'),
+  names_to = 'city',
+  values_to = 'count'
+)
+
+head(flightDataLong)
+```
+
+I want to create two columns, on_time and delayed. This will allow me to sum across the two columns to get the total flights for each city by each airline. I rename "on time" to "on_time" to remove the space in the variable name
+
+```{r}
+flightDataLong <- flightDataLong |> pivot_wider(
+  names_from = status,
+  values_from = count
+)
+
+colnames(flightDataLong)[3] <- 'on_time'
+
+head(flightDataLong)
+```
+
+## Mutations
+
+I add two columns: total flights and delay rate which is equal to delays divided by total flights.
+
+```{r}
+flightDataLong <- flightDataLong |> mutate(total = on_time + delayed,
+                                             delay_rate = delayed/total)
+
+head(flightDataLong)
+```
+
+## Analysis
+
+Below, I check to see which airline has the higher delay rate by each city.
+
+```{r}
+ggplot(flightDataLong, aes(x = city, y = delay_rate, fill = airline))+
+  geom_bar(stat='identity', position = 'dodge') +
+  ggtitle('Delay Rate by City')
+```
+
+The chart shows that AM West has a higher delay rate than Alaska for each city. The highest delay rates are in San Francisco while the lowest delay rates are in Phoenix.
+
+## Simpson's Paradox
+
+If we look at the total on time and delayed departures without breaking it down by city, AM West will seem to have less delays.
+
+```{r}
+totalFlights <- flightDataLong |> group_by(airline) |> summarize(total_onTime = sum(on_time), total_Delayed = sum(delayed))
+
+totalFlights <- totalFlights |> mutate(totalFlights = total_onTime + total_Delayed)
+
+totalFlights <- totalFlights |> mutate(delay_rate = total_Delayed / totalFlights)
+
+
+ggplot(totalFlights, aes(x = airline, y = delay_rate, fill = airline))+
+  geom_bar(stat='identity', position = 'dodge') +
+  ggtitle('Delay Rate by Airline')
+```
