@@ -1,0 +1,213 @@
+---
+title: "project2_CPI_report"
+author: "Semyon Toybis"
+date: "2024-03-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading the CPI report
+
+Below I import the csv file containing the CPI report from Github, where I saved the file.
+
+```{r}
+library(tidyverse)
+
+
+fileURL <- 'https://raw.githubusercontent.com/stoybis/DATA607Repo/main/news-release-table1-202401.csv'
+
+cpiData <- read_csv(fileURL, skip = 3, col_names = TRUE, show_col_types = FALSE)
+
+
+head(cpiData)
+```
+
+## Cleaning the data
+
+Below I clean the data. I start by removing the last four rows, which are footnotes.
+
+```{r}
+cpiData <- cpiData[-c(42,43,44,45,46),]
+
+tail(cpiData)
+```
+
+Next I subset the data frame to grab the indent level, expenditure category, importance, and month over month and year over year un-adjusted percent changes. I rename the columns and remove spaces from column names
+
+```{r}
+
+cpiDataSubset <- subset(cpiData, select = c(1,2,3,7,8))
+names(cpiDataSubset)[3] <- "Importance"
+names(cpiDataSubset)[4] <- "Unadj_pct_chg_yoy"
+names(cpiDataSubset)[5]  <- "Unadj_pct_chg_mom"
+
+colnames(cpiDataSubset) <- str_remove(colnames(cpiDataSubset), " ")
+
+head(cpiDataSubset)
+```
+
+Next, I remove the first row which has the time period info for the month over month and year over year changes. Then I remove rows with NAs
+
+```{r}
+
+cpiDataSubset <- cpiDataSubset[-c(1),]
+
+cpiDataSubset <- drop_na(cpiDataSubset)
+
+head(cpiDataSubset)
+```
+
+I then convert the percent change columns to type numeric
+
+```{r}
+
+cpiDataSubset$Unadj_pct_chg_yoy <- as.numeric(cpiDataSubset$Unadj_pct_chg_yoy)
+cpiDataSubset$Unadj_pct_chg_mom <- as.numeric(cpiDataSubset$Unadj_pct_chg_mom)
+
+```
+
+## Deliverable 1
+
+The first deliverable is to see the largest month over month and year over year percent changes by category
+
+First, I pivot the subset data frame to a longer format
+
+```{r}
+cpiDataSubsetLong <- pivot_longer(cpiDataSubset, cols = !c('Expenditurecategory'), names_to = 'variable',values_to = 'value')
+```
+
+I then filter the data frame for the percent change measurements
+
+```{r}
+cpiDataSubsetLongChanges <- cpiDataSubsetLong |> filter(variable == 'Unadj_pct_chg_yoy' | variable == 'Unadj_pct_chg_mom')
+```
+
+Below I visualize the data
+
+```{r}
+
+
+ggplot(cpiDataSubsetLongChanges, aes (x = Expenditurecategory,
+                                      y = value, fill = variable)) + geom_bar(position = 'dodge', stat = 'identity') +
+  coord_flip() + 
+  ggtitle('Month over Month and Year over Year percent changes by expenditure category')
+```
+
+There are a variety of interesting changes for the year over year data. The largest decreases come from energy related items such as utility (piped) gas service, fuel oil, motor fuel, gasoline, and energy commodities. This may also explain why airline fares saw a decrease as well, as fuel cost is likely a significant factor for airline fares. The largest year over year change came in motor vehicle insurance.
+
+## Deliverable 2
+
+The second deliverable is to see the largest importance for each category.
+
+The cpiDataSubset data frame essentially contains three different tables (four if you count the first row, the total CPI for All items, as a table).
+
+For each table, the indents sum to indent the indent above it. For example, food is one table and indents 2 sum to indent 1 and indents 3 sum to indent 2 within the food table.
+
+Because of this, I will need to break out the data frame into three different tables based on indent, such that there are three seperate tables: food, energy, and all items less food and energy.
+
+I do that by finding which rows are indent level 1 and then subsetting based on these values
+
+```{r}
+
+rowsForTableSplit <- which(cpiDataSubset$IndentLevel==1)
+
+rowsForTableSplit
+```
+
+Below I subset into three different tables based on the row info above
+
+```{r}
+foodSubset <- cpiDataSubset |> slice(rowsForTableSplit[1]:(rowsForTableSplit[2]-1))
+
+energySubset <- cpiDataSubset |> slice(rowsForTableSplit[2]:(rowsForTableSplit[3]-1))
+
+otherSubset <- cpiDataSubset |> slice(rowsForTableSplit[3]:nrow(cpiDataSubset))
+
+```
+
+Starting with the food subset, I tidy the data into a longer format by pivoting and arrange it by the variable to see the largest weights
+
+```{r}
+foodSubsetPivoted <- foodSubset |> pivot_longer(cols = !c('IndentLevel', 'Expenditurecategory'),
+                           names_to = 'Variable',
+                           values_to = 'Value')
+
+foodSubsetPivoted <- foodSubsetPivoted |> arrange(Variable, IndentLevel)
+
+head(foodSubsetPivoted)
+```
+
+From this data frame, I find the max importance, which I will use in setting the scale for the y-axis in a plot
+
+```{r}
+maxWeightFood <- foodSubsetPivoted |> 
+  filter(Variable =='Importance') |> 
+  summarise(max_val = max(Value)) |> pull(max_val)
+
+```
+
+Below I visualize the weights for the food subset. The weights of higher indent levels are larger, but what this graph shows is how each indent level is made up. So for example, Food has a 13% importance in total CPI. Within Food, Food at home and Food away from home have an 8% and 5% weight. And then indent 3 shows the make up of food at home.
+
+```{r}
+foodSubsetPivoted |> filter(Variable =='Importance') |> 
+  ggplot(mapping = aes(x=IndentLevel, y= Value, fill = fct_inorder(Expenditurecategory))) + 
+  geom_bar(stat = 'Identity', position = 'dodge') + 
+  scale_y_continuous(breaks = seq(0, maxWeightFood, by = 1)) + 
+  ggtitle('Importance to CPI by Indent Level by category')
+```
+
+I repeat the above process for the Energy and Other categories. I consolidate the code blocks into one for each subset.
+
+Below is the above process but for Energy:
+
+```{r}
+#Energy subset
+energySubsetPivoted <- energySubset |> pivot_longer(cols = !c('IndentLevel', 'Expenditurecategory'),
+                                                names_to = 'Variable',
+                                                values_to = 'Value')
+
+#arrange in tidy format to see largest weights
+energySubsetPivoted <- energySubsetPivoted |> arrange(Variable, IndentLevel)
+
+head(energySubsetPivoted)
+
+maxWeightEnergy <- energySubsetPivoted |> 
+  filter(Variable =='Importance') |> 
+  summarise(max_val = max(Value)) |> pull(max_val)
+
+#visualize weights
+energySubsetPivoted |> filter(Variable =='Importance') |> 
+  ggplot(mapping = aes(x=IndentLevel, y= Value, fill = fct_inorder(Expenditurecategory))) + 
+  geom_bar(stat = 'Identity', position = 'dodge') + 
+  scale_y_continuous(breaks = seq(0, maxWeightEnergy, by = 1)) + 
+  ggtitle('Importance to CPI by Indent Level by category')
+
+```
+
+Other subset
+
+```{r}
+#other subset
+otherSubsetPivoted <- otherSubset |> pivot_longer(cols = !c('IndentLevel', 'Expenditurecategory'),
+                                                    names_to = 'Variable',
+                                                    values_to = 'Value')
+
+#arrange in tidy format to see largest weights
+otherSubsetPivoted <- otherSubsetPivoted |> arrange(Variable, IndentLevel)
+
+head(otherSubsetPivoted)
+
+maxWeightOther <- otherSubsetPivoted |> 
+  filter(Variable =='Importance') |> 
+  summarise(max_val = max(Value)) |> pull(max_val)
+
+#visualize weights
+otherSubsetPivoted |> filter(Variable =='Importance') |> 
+  ggplot(mapping = aes(x=IndentLevel, y= Value, fill = fct_inorder(Expenditurecategory))) + 
+  geom_bar(stat = 'Identity', position = 'dodge') + 
+  scale_y_continuous(breaks = seq(0, maxWeightOther, by = 5)) + 
+  ggtitle('Importance to CPI by Indent Level by category')
+```

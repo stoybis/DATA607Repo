@@ -1,0 +1,107 @@
+---
+title: "project2_nobelprize"
+author: "Semyon Toybis"
+date: "2024-03-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading Nobel prize data
+
+Below I import the csv file containing Nobel prize data from Github, where I saved the file.
+
+```{r}
+library(tidyverse)
+
+fileURL <- 'https://raw.githubusercontent.com/stoybis/DATA607Repo/main/complete.csv'
+
+nobelData <-read.csv(url(fileURL), na.strings=c("","NA"))
+
+head(nobelData)
+```
+
+Next I convert the category and gender columns to type factor, as these will be used for analysis
+
+```{r}
+nobelData$category <- as.factor(nobelData$category)
+nobelData$gender <- as.factor(nobelData$gender)
+```
+
+## Deliverable 1
+
+The first deliverable is to see how have the number of awards given out changed over time.
+
+I create a new data frame that is grouped by the award year and then by the category and then summarized to count how many prizes were given out in each category in each year
+
+```{r}
+nobelDataGroupedYearAndCategory <- nobelData |> group_by(awardYear, category) |>
+  summarise(count = length(category), .groups = "drop_last")
+
+head(nobelDataGroupedYearAndCategory, n=10)
+```
+
+[The data frame above is in tidy format.]{.underline}
+
+I then visualize the awards by category over time
+
+```{r}
+ggplot(nobelDataGroupedYearAndCategory, aes(x = awardYear, y = count, fill = category)) +
+  geom_bar(position = 'stack', stat = 'identity') +
+  ggtitle('Nobel Prize Awards by category type over time')
+```
+
+The number of awards given out per year has increased over time, from around five per year to around 13 per year more recently. There are a couple of years without data in the 1940s. This may be because the awards were suspended during World War II.
+
+Below I visualize how the prize each category received as a proportion of the total awards changes over time.
+
+```{r}
+ggplot(nobelDataGroupedYearAndCategory, aes(x = awardYear, y = count, fill = category)) +
+  geom_area(position = 'fill') + 
+  ggtitle('Proportion of total awards for each category over time')
+```
+
+Interestingly, the awards for Literature and Peace has decreased over time. While the other categories vary, they seem more consistent than Peace and Literature.
+
+## Deliverable 2
+
+The second deliverable is to determine which category has received the most awards.
+
+I added a column to the above data frame that tracks the cumulative total of awards for each category by year. I use the ave function from the stats package, which allows for grouping of data and then applying a summary function for the desired measurement. I use the cumsum function from base R
+
+```{r}
+nobelDataGroupedYearAndCategory$cumulative <- ave(nobelDataGroupedYearAndCategory$count, nobelDataGroupedYearAndCategory$category, FUN = cumsum)
+
+ggplot(nobelDataGroupedYearAndCategory, aes(x = awardYear, y = cumulative, color = category)) +
+  geom_line() +
+  ggtitle('Total Rewards by category over time')
+```
+
+Physiology or medicine has received the most awards over time, followed by physics. This chart easily visualizes that the prize for Economic Sciences is the newest category, having started around the late 1960s/early 1970s.
+
+## Deliverable 3
+
+The third deliverable is to examine how the proportion of awards given to males versus femals has changed over time.
+
+I group the original tidy data frame by year and then by gender and apply the summarize function to count how many awards in each year were given to males versus females. There are some observations that do not have a value for gender, which comes across as NA.
+
+```{r}
+
+nobelDataGenderTidy <- nobelData |> group_by(awardYear, gender) |>
+  summarise(count = length(gender), .groups = "drop_last")
+
+head(nobelDataGenderTidy)
+```
+
+Below I visualize this data
+
+```{r}
+ggplot(nobelDataGenderTidy, aes(x = awardYear, y = count, fill = gender)) +
+  geom_area(position = 'fill') +
+  ggtitle('Proportion of awards by gender over time')
+
+```
+
+The vast majority of awards are given to males, though the proportion of females has increased in more recent history to a level that was reached in the 1910s/early 1920s. It is unclear what gender the NA values are. If those awards were given to females, the proportion of females would be higher.

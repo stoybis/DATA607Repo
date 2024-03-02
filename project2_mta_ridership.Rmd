@@ -1,0 +1,114 @@
+---
+title: "project2_mta_ridership"
+author: "Semyon Toybis"
+date: "2024-03-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading MTA Ridership Data
+
+Below I import the csv file containing MTA ridership data from Github, where I saved the file.
+
+```{r cars}
+library(tidyverse)
+library(scales)
+
+fileURL <- 'https://raw.githubusercontent.com/stoybis/DATA607Repo/main/MTA_Daily_Ridership_Data__Beginning_2020_20240302.csv'
+
+mtaData <-read.csv(url(fileURL))
+
+head(mtaData)
+```
+
+## Tidying the data
+
+Below I tidy the data by pivoting it to a longer format. Additionally, I set the measurement column to be a factor, and I convert the Data column (which is currently type character) to dates using the Lubridate package
+
+```{r}
+
+
+mtaDataTidy <- pivot_longer(mtaData, cols = !c('Date'), 
+                            names_to = 'measurement',
+                            values_to = 'value')
+
+
+mtaDataTidy$measurement <- as.factor(mtaDataTidy$measurement)
+
+mtaDataTidy$Date <- mdy(mtaDataTidy$Date)
+
+head(mtaDataTidy, n = 10)
+
+```
+
+## Deliverable 1
+
+One of the deliverables is to summarize the 2020, 2021, 2022 average ridership for Subway, Buses, LIRR and Metro-North and find which transportation has the highest and lowest ridership in 2020.
+
+First I filter the tidy data to grab only the measurements for ridership totals and then I add a year column, which extracts the year from the date column
+
+```{r}
+
+riderShipTotalsTidy <- filter(mtaDataTidy, grepl('Ridership', measurement))
+
+riderShipTotalsTidy$Year <- year(riderShipTotalsTidy$Date)
+
+head(riderShipTotalsTidy)
+```
+
+Next, I summarize the data by grouping first by year then by transportation type
+
+```{r}
+summaryTableRidership <- riderShipTotalsTidy |> 
+  group_by(Year, measurement) |>
+  summarize(avg = mean(value, na.rm = TRUE))
+
+head(summaryTableRidership)
+```
+
+Below I visualize the data
+
+```{r}
+ggplot(summaryTableRidership, aes(x = Year, y = avg, fill = measurement)) +
+  geom_bar(position = 'dodge', stat ='identity') + 
+  ggtitle('Average yearly ridership by transportation type')
+```
+
+Below I create a table that has the same data as above but in an easily readable format. I do this by pivoting the table to a wider format
+
+```{r}
+summaryTableRidershipWider <- pivot_wider(summaryTableRidership, names_from = measurement, values_from = avg)
+
+summaryTableRidershipWider[2:6] <- apply(summaryTableRidershipWider[2:6], c(1,2), comma)
+
+summaryTableRidershipWider
+```
+
+Based on the above graph and table, the Staten Island Railway had the lowest average ridership in 2020 and the subway had the highest, however these numbers were lower than in 2021 through 2024 because of the COVID pandemic.
+
+## Deliverable 2
+
+The second deliverable is to compare the Subway and Buses ridership and determine did more people take the Subway or Bus in 2020.
+
+Below I subset the original tidy data frame for data only from 2020 and then for data only on subway and buses ridership
+
+```{r}
+subAndBusSubset2020 <- mtaDataTidy |> filter(year(Date) == 2020)
+subAndBusSubset2020 <- subAndBusSubset2020 |> 
+  filter(measurement %in% c('Subways..Total.Estimated.Ridership','Buses..Total.Estimated.Ridership'))
+
+
+head(subAndBusSubset2020)
+```
+
+Below I visualize the data
+
+```{r}
+ggplot(subAndBusSubset2020, aes (x = Date, y = value, color = measurement)) +
+  geom_line()
+```
+
+The subway had higher ridership in 2020 than buses, however both saw a meaningful decline due to the onset of COVID.
