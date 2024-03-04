@@ -25,7 +25,9 @@ cpiData <- read_csv(fileURL, skip = 3, col_names = TRUE, show_col_types = FALSE)
 head(cpiData)
 ```
 
-## Cleaning the data
+## Cleaning and tidying the data
+
+The data can be tidied such that each line is a new observation. For example, for the item food, we can observe different measures in each row (importance, un-adjusted index values, etc).
 
 Below I clean the data. I start by removing the last four rows, which are footnotes.
 
@@ -106,7 +108,7 @@ The cpiDataSubset data frame essentially contains three different tables (four i
 
 For each table, the indents sum to indent the indent above it. For example, food is one table and indents 2 sum to indent 1 and indents 3 sum to indent 2 within the food table.
 
-Because of this, I will need to break out the data frame into three different tables based on indent, such that there are three seperate tables: food, energy, and all items less food and energy.
+Because of this, I will need to break out the data frame into three different tables based on indent, such that there are three separate tables: food, energy, and all items less food and energy.
 
 I do that by finding which rows are indent level 1 and then subsetting based on these values
 

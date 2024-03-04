@@ -1,0 +1,96 @@
+---
+title: "project2GlobalInflation"
+author: "Semyon Toybis"
+date: "2024-03-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading Global Inflation Data
+
+Below I import the csv file containing MTA ridership data from Github, where I saved the file.
+
+```{r}
+library(tidyverse)
+
+
+fileURL <- 'https://raw.githubusercontent.com/stoybis/DATA607Repo/main/global_inflation_data.csv'
+
+inflationData <-read.csv(url(fileURL))
+
+head(inflationData)
+```
+
+## Tidying the data
+
+The data is not in a tidy format because there are multiple observations in each row. Each column is a different observation, for example we have the observation of average annual inflation data in 1980, 1981, 1982, etc for each country. These are all new observations and should have their own rows.
+
+First, I remove the X from the column names.
+
+```{r}
+
+colnames(inflationData)[3:ncol(inflationData)] <- str_replace(colnames(inflationData)[3:ncol(inflationData)],"X","")
+
+head(inflationData)
+```
+
+Then I pivot the data frame to a longer format so that each year is its own observation in a separate row. I also convert the years and values to type numeric and the country names to factors.
+
+```{r}
+inflationDataTidy <- pivot_longer(inflationData,
+                                  cols = !c('country_name','indicator_name'), names_to = 'year', values_to = 'value')
+
+inflationDataTidy$country_name <- as.factor(inflationDataTidy$country_name)
+inflationDataTidy$year <- as.numeric(inflationDataTidy$year)
+inflationDataTidy$value <- as.numeric(inflationDataTidy$value)
+
+head(inflationDataTidy, n = 10)
+```
+
+The data frame is now tidy - each new observation is its own row.
+
+## Analysis
+
+One of the questions is to compare average annual inflation data for countries in similar regions. I am curious to see how the inflation data compares for the US, Canada, and Mexico, the three largest countries in North America.
+
+Below I filter the tidy data frame for these countries.
+
+```{r}
+
+UsCanMex <- inflationDataTidy |> filter(country_name == 'Canada'|country_name=='Mexico'| country_name == 'United States')
+
+head(UsCanMex, n = 10)
+```
+
+Below I graph the average annual inflation rates over time.
+
+```{r}
+ggplot(UsCanMex, aes(x = year, y = value, color = country_name)) +
+  geom_line() + ggtitle('Average annual inflation rate over time')
+```
+
+While all three countries had higher inflation in the early 1980s than the 1990s to 2000s, Mexico was meaningfully higher than the US and Canada. This may have to do with Mexico's economy being in the developing stage whereas the US and Canada are developed economies.
+
+## Analysis 2
+
+Below, I conduct the above analysis for Spain, France, Germany, Italy, and Portugal, five of the larger countries in Western Europe.
+
+```{r}
+filterList <- c('Spain', 'France', 'Germany', 'Italy', 'Portugal')
+
+westernEurope <- inflationDataTidy |> filter(country_name %in% filterList)
+
+head(westernEurope, n = 10)
+```
+
+Below I graph the average annual inflation rates over time
+
+```{r}
+ggplot(westernEurope, aes(x = year, y = value, color = country_name)) +
+  geom_line() + ggtitle('Average annual inflation rate over time')
+```
+
+Similar to the North America graph, these countries saw high inflation in the 1980s. However, post 1980, the average annual inflation rates for these countries is higher than the US and Canada even though all of these countries would be considered developed economies.
