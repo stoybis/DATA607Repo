@@ -26,6 +26,8 @@ head(mtaData)
 
 ## Tidying the data
 
+The data is not in a tidy format because each date has multiple observations. For example, the total subway ridership for March 1st, 2020 and the total bus ridership for March 1st, 2020 are two different observations, but they are currently contained in the same row.
+
 Below I tidy the data by pivoting it to a longer format. Additionally, I set the measurement column to be a factor, and I convert the Data column (which is currently type character) to dates using the Lubridate package
 
 ```{r}
