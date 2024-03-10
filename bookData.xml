@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BookData>
+	<book>
+		<title>The Catcher in the Rye</title>
+		<authors>J.D. Salinger</authors>
+		<genre>Fiction</genre>
+		<type>Coming of Age</type>
+	</book>
+	<book>
+		<title>Thinking, Fast and Slow</title>
+		<authors>Daniel Kahneman</authors>
+		<genre>Non-fiction</genre>
+		<type>Psychology</type>
+	</book>
+	<book>
+		<title>Trading Fixed Income and FX in Emerging Markets: A Practitioner's Guide</title>
+		<authors>Dirk Willer, Ram Bala Chandran, Kenneth Lam</authors>
+		<genre>Non-fiction</genre>
+		<type>Investing</type>
+	</book>
+</BookData>
