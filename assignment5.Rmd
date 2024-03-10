@@ -1,0 +1,148 @@
+---
+title: "Assignment 5"
+author: "Semyon Toybis"
+date: "2024-03-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Objective
+
+The goal of this assignment is to identify three books and for each book capture fields including, title and author. I have also chosen to capture the book genre and type. One of the books is required to have more than one author. I decided to store all authors in one variable (authors) so that a book with multiple authors had one "authors" column where the names of the multiple authors were separated by commas within that column. If necessary, it would be easy to separate the authors by splitting the string by comma.
+
+Once this information is gathered, it must be saved in three different files types: HTML, XML, and JSON.
+
+The goal is to then read these file types into R and save the data into a data frame.
+
+I have saved these files into my Github repo to allow for code replication.
+
+## Importing the HTML file
+
+Below I import the HTML file. I start with loading the required packages. Then, I save the file URL (from Github) and read in the data.
+
+```{r}
+library(tidyverse)
+library(XML)
+library(RCurl)
+
+url <- getURL("https://raw.githubusercontent.com/stoybis/DATA607Repo/main/bookData.html")
+
+bookDataHTML <-readHTMLTable(url)
+
+
+```
+
+The data came across as a list of one that has three observations of four variables. Below, I convert the list into a data frame.
+
+```{r}
+bookDataHTMLDF <- as.data.frame(bookDataHTML)
+
+head(bookDataHTMLDF)
+```
+
+I remove "NULL" from the column names.
+
+```{r}
+
+colnames(bookDataHTMLDF) <- sub("NULL.","",colnames(bookDataHTMLDF))
+
+head(bookDataHTMLDF)
+```
+
+## Importing the XML file
+
+Below I import the XML file. I start with loading the required packages.
+
+The XML content is stored via the read_xml function. This captures the encoding.
+
+The xmlParse function then parses the XML file to create an R structure that represents the XML tree.
+
+getNodeSet is then used to capture the nodes in the file. In my file, each book was entered as a "book" node, with that note containing the four observations about the book. These are the nodes I am interested in getting into a data frame.
+
+Last, I use xmlToDataFrame based on the "book" nodes to convert the data into a data frame.
+
+```{r}
+library(xml2)
+
+bookDataXML <- read_xml('https://raw.githubusercontent.com/stoybis/DATA607Repo/main/bookData.xml')
+
+bookDataXMLParsed <-xmlParse(bookDataXML)
+
+bookNodes <- getNodeSet(bookDataXMLParsed, '//book')
+
+bookDataXMLDF <-xmlToDataFrame(nodes = bookNodes)
+
+head(bookDataXMLDF)
+```
+
+## Importing the JSON file
+
+Below I import the JSON file. I start with loading the required packages.
+
+```{r}
+library(rjson)
+library(data.table)
+
+bookDataJSON <- fromJSON(file = 'https://raw.githubusercontent.com/stoybis/DATA607Repo/main/bookData.json')
+
+bookDataJSONDF <- as.data.frame(bookDataJSON)
+
+head(bookDataJSONDF)
+```
+
+The data came across as one row with 12 observations. This data needs to be tidies so that each row is an observation (a book), that has four features (title, authors, genre, and type).
+
+First, I pivot the data to a long format.
+
+```{r}
+
+bookDataJSONDF <- pivot_longer(bookDataJSONDF, cols = everything())
+
+head(bookDataJSONDF, n = 10)
+```
+
+Next, I add a column that has the number from each observation in "name". This will allow me to group the appropriate fields together by book. Since the first book doesn't have a number, I replace the NAs with 0.
+
+```{r}
+
+bookDataJSONDF$bookID <- str_match(bookDataJSONDF$name, '\\d')
+
+bookDataJSONDF$bookID <- as.numeric(bookDataJSONDF$bookID)
+
+bookDataJSONDF$bookID <- replace(bookDataJSONDF$bookID, is.na(bookDataJSONDF$bookID), 0)
+
+
+head(bookDataJSONDF, n=10)
+```
+
+Next, I remove the numbers from the name column so that I can create common columns in the wider format. I also replace periods to make the observations in "name" common.
+
+```{r}
+
+bookDataJSONDF$name <- str_replace_all(bookDataJSONDF$name, '\\d','')
+bookDataJSONDF$name <-str_replace_all(bookDataJSONDF$name, "\\.", "")
+
+head(bookDataJSONDF, n=10)
+```
+
+Last, I pivot the data to a wider format and drop the ID column. I also drop "BookData" from the column names.
+
+```{r}
+bookDataJSONDF <- bookDataJSONDF |> pivot_wider(id_cols = bookID, names_from = name, values_from = value)
+
+
+bookDataJSONDF <- select(bookDataJSONDF, -bookID)
+
+colnames(bookDataJSONDF) <- str_replace_all(colnames(bookDataJSONDF), "BookData", "")
+
+head(bookDataJSONDF)
+```
+
+## Conclusion
+
+I was ultimately able to get the data frames to be essentially the same (one of the data frames has column names starting in lower case, but for our purposes this doesn't make a difference).
+
+The HTML file was easiest to import into a data frame, as it came across as a list that was easy to convert to a data frame. The XML file was similar, however there were more steps to decipher the nodes in order to convert the file into a data frame. The JSON file took the most editing and required tidying the data. It is possible that I missed some fields in creating the JSON file that would have made it more easily convertible to an R data frame.
