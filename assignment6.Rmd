@@ -1,0 +1,108 @@
+---
+title: "Assignment6"
+author: "Semyon Toybis"
+date: "2024-03-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Purpose
+
+The purpose of this assignment is to access the NY Times API, pull JSON data, and transform it into a data frame. Below I load the required packages.
+
+```{r, message = FALSE}
+library(tidyverse)
+library(httr2)
+library(data.table)
+```
+
+## NY Times API
+
+I decided to pull the current NY Times best seller list for hard cover non-fiction books. The URL to pull this information follows the below format:
+
+```         
+https://api.nytimes.com/svc/books/v3/lists/current/hardcover-fiction.json?api-key=yourkey
+```
+
+I created an object request_url to hold the url. However I have hidden the code to conceal my api key.
+
+```{r, include=FALSE}
+
+request_url <- 'https://api.nytimes.com/svc/books/v3/lists/current/hardcover-nonfiction.json?api-key=7uTVAXyumltbXLaH2czoEnYCjuccEKKq'
+```
+
+## Pulling the api data
+
+Below I pull the data from the NY Times API
+
+```{r}
+apiResponse <- request(request_url) |> req_perform()
+
+summary(apiResponse)
+```
+
+The result is a list of 7 with various attributes
+
+## Extracting data
+
+Below I parse the JSON content.
+
+```{r}
+bookList <- apiResponse |> resp_body_json()
+
+summary(bookList)
+```
+
+It seems like the results list might have the information we are looking for
+
+```{r}
+summary(bookList$results)
+```
+
+Specifically, bookList is a list that has nested list. Based on the above, the books list might have the info on the best sellers. I investigate below
+
+```{r}
+bookInfo <- bookList$results$books
+
+summary(bookInfo)
+glimpse(bookInfo)
+```
+
+bookInfo is a list of 15, the top 15 best sellers in the non-fiction hardcover category. For each book in the top 15, there is a list of 26 different variables.
+
+Below, I bind the list of 15, with 26 variable for each of the 15, into a data frame by binding by rows.
+
+```{r}
+bookInfoDF <- as.data.frame(do.call(rbind,bookInfo))
+
+glimpse(bookInfoDF)
+```
+
+Some of these variables don't provide us with much information, so I subset the data frame.
+
+```{r}
+bookInfoDFSubset <- bookInfoDF |> select(rank, rank_last_week, weeks_on_list,
+                                         primary_isbn10, primary_isbn13, publisher,
+                                         description, title, author,
+                                         contributor)
+
+glimpse(bookInfoDFSubset)
+```
+
+Below I clean up the data frame
+
+```{r}
+bookInfoDFSubset <- bookInfoDFSubset |>
+  mutate(across(c(rank, rank_last_week, weeks_on_list), as.numeric),
+         across(c(primary_isbn10, primary_isbn13, publisher, description,
+                  title, author, contributor), as.character))
+
+head(bookInfoDFSubset)
+
+glimpse(bookInfoDFSubset)
+```
+
+The data frame is now clean and it is in tidy format. Each row is an observation, in this case a book, and each column is a variable that captures information about the book: its rank on the list, its rank on the list last week,..., title, author, and contributor.
