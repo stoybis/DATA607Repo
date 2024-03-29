@@ -1,0 +1,242 @@
+---
+title: "Assignment7"
+author: "Semyon Toybis"
+date: "2024-03-25"
+output: 
+  html_document:
+    pandoc_args: ["--metadata", "reference-section-title=References"]
+link-citations: true
+bibliography: citationAssignment7.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment
+
+For this assignment, we are required to replicate the sentiment analysis code from Chapter 2 "Sentiment analysis with tidy data" from "Text Mining with R: A Tidy Approach".
+
+Once we replicate this analysis, we are required to extend the analysis by working with a different corpus and incorporating at least one additional sentiment lexicon.
+
+Below, I load the required packages.
+
+```{r, message=FALSE}
+library(tidytext)
+library(janeaustenr)
+library(tidyverse)
+library(reshape2)
+```
+
+## Downloading bib file from GitHub
+
+The below code downloads the .bib file that I used for the citation into the active directory so that someone who wants to re-run this code can do so and generate the citation and reference.
+
+```{r, message=FALSE}
+library(httr)
+
+bibUrl <- 'https://raw.githubusercontent.com/stoybis/DATA607Repo/main/citationAssignment7.bib'
+
+pathToSave <- 'citationAssignment7.bib'
+
+GET(url = bibUrl, httr::write_disk(pathToSave, overwrite = TRUE))
+
+```
+
+## Recreating the analysis from Chapter 2
+
+The analysis in this entire section is replicated from [@Silge_Robinson]
+
+The analysis starts by loading in books written by Jane Austen and converting it to a tidy format:
+
+```{r}
+
+
+tidy_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, 
+                                regex("^chapter [\\divxlc]", 
+                                      ignore_case = TRUE)))) %>%
+  ungroup() %>%
+  unnest_tokens(word, text)
+```
+
+Once the books are in tidy format (one token per row), the author proceed to analyze how many positive and negative words there are per each defined section in the book, which is defined as an 80 line section. This is done by joining the bing sentiments to the tidy_books data frame, counting the times each sentiment appears in a section and pivoting the data frame.
+
+```{r}
+
+
+jane_austen_sentiment <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(book, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+```
+
+The data is then visualized:
+
+```{r}
+
+ggplot(jane_austen_sentiment, aes(index, sentiment, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~book, ncol = 2, scales = "free_x")
+```
+
+The next portion of the analysis compares the sentiment analysis using three different lexicons to analyze the book "Pride and Prejudice". tidy_books is filtered for "Pride and Prejudice" which is then joined to the afinn, bing, and nrc lexicons. These are combined into one data frame and visualized:
+
+```{r}
+pride_prejudice <- tidy_books %>% 
+  filter(book == "Pride & Prejudice")
+
+afinn <- pride_prejudice %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(index = linenumber %/% 80) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+
+bing_and_nrc <- bind_rows(
+  pride_prejudice %>% 
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  pride_prejudice %>% 
+    inner_join(get_sentiments("nrc") %>% 
+                 filter(sentiment %in% c("positive", 
+                                         "negative"))
+    ) %>%
+    mutate(method = "NRC")) %>%
+  count(method, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+
+bind_rows(afinn, 
+          bing_and_nrc) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+
+Lastly, all of the Jane Austen books are analyzed to see the most often appearing positive and negative words:
+
+```{r}
+bing_word_counts <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+## Extending the analysis - new text and lexicon
+
+I will analyze the sentiment of two Charles Dickens books to see how they compare. I will use the "gutenbergr" library to access Charles Dickens' work. First, I will compare the sentiment analysis for "A Christmas Carol" and "David Copperfield" using the 'Bing' lexicon.
+
+```{r}
+library(gutenbergr)
+
+gutenberg_works() |> filter(title == 'A Christmas Carol' | title=='David Copperfield')
+```
+
+Below I download the two books:
+
+```{r}
+dickensBooks <- gutenberg_download(c(766, 19337), meta_fields = 'title')
+
+glimpse(dickensBooks)
+```
+
+The data frame needs to be converted to tidytext format (one token per row) and stop_words need to be removed. Also, to track the sentiment over the course of the book, I need the line number. I start by getting the line number by grouping by book and tracking the line number, then converting to tidytext format and removing stop words
+
+```{r}
+
+dickensBooksTidy <- dickensBooks %>%
+  group_by(title) %>%
+  mutate(
+    linenumber = row_number()) %>%
+  ungroup() %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words)
+
+dickensBooksTidy$gutenberg_id <- NULL
+#dickensBooks <- dickensBooks |> unnest_tokens(word, text) |> anti_join(stop_words)
+```
+
+Now that the data frame is in tidytext format, I can bind the 'bing' sentiment lexicon and analyze the positive vs negative sentiment by line number similar to what was done above for the Jane Austen books. I will use the same 80 line length.
+
+```{r}
+
+
+dickens_sentiment <- dickensBooksTidy %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(title, index = linenumber %/% 80, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+```
+
+Now, I recreate the visualization from the Jane Austen books but for the Charles Dickens books:
+
+```{r}
+ggplot(dickens_sentiment, aes(index, sentiment, fill = title)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~title, ncol = 2, scales = "free_x")
+```
+
+Compared to the Jane Austen books, these two Charles Dickens novels have a lot more negative sentiment. However, based on the above, both end on a positive note.
+
+### Utilizing the 'Jockers' sentiment lexicon from the lexicon package
+
+Below I use the 'Jockers' sentiment lexicon from the Lexicon package.
+
+```{r}
+library(lexicon)
+
+head(key_sentiment_jockers)
+```
+
+This sentiment lexicon is similar to 'afinn' in that it is each word is rated on positive/negative connotation based on scale, however the scale for 'afinn' is (-5,5) whereas for 'Jockers' it is (-1,1).
+
+I will compare the sentiment score for 'David Copperfield' as measured by 'afinn' and 'Jockers' lexicon.
+
+First, I filter dickensBooksTidy for 'David Copperfield'. Next, I join the 'afinn' sentiment followed by the 'Jockers' sentiment and drop NAs based on 'Jockers'. Then, I rescale the 'Jockers' sentiment so that it is on the same scale as 'afinn' (using the 'datawizard' package), track the cumulative sum for each, pivot to a longer data frame, and pass to ggplot.
+
+```{r}
+library(datawizard)
+davidCopperfieldTidy <- dickensBooksTidy |> filter(title =='David Copperfield')
+
+davidCopperfieldTidy <- davidCopperfieldTidy |> inner_join(get_sentiments('afinn')) |> left_join(key_sentiment_jockers, by = 'word') |> rename(afinnSent = value.x, jockersSent = value.y) |> drop_na(jockersSent)
+
+
+davidCopperfieldTidy$jockersScaled <- as.numeric(rescale(davidCopperfieldTidy$jockersSent, c(-5,5)))
+davidCopperfieldTidy$afinnCumSum <- cumsum(davidCopperfieldTidy$afinnSent)
+davidCopperfieldTidy$jockersCumSum <- cumsum(davidCopperfieldTidy$jockersScaled)
+
+
+dctLong <- davidCopperfieldTidy |> pivot_longer( cols = !c(title, linenumber,word), values_to = 'measure') 
+
+dctLong <- dctLong |> filter(name == 'afinnCumSum'| name=='jockersCumSum')
+dctLong$name <- as.factor(dctLong$name)
+ggplot(dctLong, aes(x=linenumber, y = measure, color = name)) + geom_line() + ggtitle('Cumulative sentiment analysis for David Copperfield by Lexicon')
+```
+
+Interestingly, it seems like 'David Copperfield' has more extreme words (both negative in positive) according to 'Jockers' as compared to 'afinn', which is why it has a larger draw down, a recovery that brings it back in line with 'afinn' and then another draw down that prevents it from recovering back to the same level as 'afinn'. We can visualize that:
+
+```{r}
+dctLong2 <- davidCopperfieldTidy |> pivot_longer( cols = !c(title, linenumber,word), values_to = 'measure') 
+
+dctLong2 <- dctLong2 |> filter(name == 'afinnSent'| name=='jockersScaled')
+
+ggplot(dctLong2, aes(x = measure, fill = name)) + geom_histogram(alpha = 0.5)
+```
