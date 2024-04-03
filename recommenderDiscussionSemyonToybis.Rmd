@@ -1,0 +1,46 @@
+---
+title: "SemyonToybisRecommenderSystemsDiscussion"
+author: "Semyon Toybis"
+date: "2024-04-03"
+output: 
+  html_document:
+    pandoc_args: ["--metadata", "reference-section-title=References"]
+link-citations: true
+bibliography: discussionCitation.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Spotify overview
+
+Spotify is a leading music streaming platform that is known for its ability to leverage data in order to recommend songs and playlists to individual users. In fact, Spotify's data capabilities are one of the reasons it has become the market leader in the space over legacy companies like Pandora and Last.fm and current competitors like Apple Music and Tidal.
+
+## Scenario analysis
+
+### Who are the users?
+
+Spotify users are people who stream music over the internet.
+
+### What are their key goals
+
+A user's key goal is to easily find the music they are interested in while also getting recommendations for similar type of music they might like or recommendations for different types of music that they haven't listened to before. Spotify's key goal is to retain users and increase the time spent on the Spotify platform.
+
+### How can their goals be accomplished
+
+Spotify employs a recommender system that uses both collaborative filtering and content based filtering to recommend tracks. With collaborative filtering, Spotify maps which tracks appear most often in the same playlists. Tracks that often appear together are mapped closely together while tracks that rarely appear together are mapped further away. However, this can still cause tracks that are different in character to appear together, such as a Mariah Carey Christmas song (which is more of a pop song) and a Christmas classic. To further enhance the recommendation, Spotify employs content based filtering by analyzing metadata about each track such as custom fields that describe the characteristics of the track (for example, danceability or energy) as well as temporal structure (such as beats, bars, and sections). Furthermore, Spotify utilizes text analysis to analyze the content of lyrics for each track as well as reviews of each track. This helps identify differences such as the Christmas song example above. @YouTube_2023
+
+## Reverse engineering
+
+Spotify has an easy to use interface and its capabilities in data science are evident. Users have an ability to "like" a track - this can provide Spotify info for content based filtering based on what type of tracks users "like". Furthermore, Spotify tracks the type of music that users have been listening to and creates custom playlists based on the genres or types of tracks users are listening to in order to match different music moods that a user might be in. Furthermore, Spotify tracks custom playlists that users make, how often they listen to individual tracks, and whether they finish a recommended track or skip through it. This provides Spotify a treasure trove of data on individual users and listening habits, which combined with data on tracks that are on the platform, results in a leading recommender system.
+
+## Suggestions for improvement
+
+It is difficult to suggest improvements for Spotify, as it is almost more of a data company than a music streaming company. The company has received high praise from users for its "Discover Weekly" playlists, which introduce users to new tracks based on their listening habits.
+
+The WSJ video mentions that Spotify has a few areas of improvement: Spotify improperly labels non-western music (such as music from South Asia), can reinforce biases for certain genres or song types (eg gender biases), and improperly catches metadata for classical music @YouTube_2023. Spotify employs human editors that help mitigate some of these biases by having input on Spotify playlists that are platform wide rather than tailored to individual users. Also, while Spotify has creates a variety of playlists tailored to individual users, it also highlights trending songs that are popular across different genres via platform wide playlists which can help individual users discover new tracks and genres.
+
+## **Spotify's efforts in reinforcement learning**
+
+Spotify recently published a paper about its efforts to improve the user experience via reinforcement learning. Spotify built a user model based on real user listening sessions. Spotify then used a reinforcment learning model to suggest tracks to the user model in order to predict how a real user responds to suggestions from the reinforcement learning model, with the goal of increasing a user satisfaction score. Spotify found that this approach lead to better user satisfaction metrics based on online tests @10.1145/3580305.3599777.
