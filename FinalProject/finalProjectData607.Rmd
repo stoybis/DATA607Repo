@@ -1,0 +1,374 @@
+---
+title: "finalProjectData607"
+author: "Semyon Toybis"
+date: "2024-04-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+For my final project I conducted sentiment analysis on a company's annual report and examined the corresponding stock price performance for the following period. I wanted to see if an annual report where management's commentary was more positive corresponded with a period of stronger stock price performance for the following year (until the next annual report).
+
+I decided to conduct this analysis on Nvidia given its market dominance recently.
+
+Specifically, I pulled Form 10-K, which is an annual form that is required of publicly traded companies and discusses the company's performance for the year. Form 10-K has a required section of management commentary (Item 7) which covers both past performance and outlook and can be analyzed for sentiment. I pulled 10-Ks for several years from the SEC EDGAR database via API and webscraping.
+
+Next, I pulled stock price performance from Yahoo Finance. The challenge was to extract and clean the text data, get it into tidytext format to perform sentiment analysis, and add in the percent change for the stock price for the corresponding forward period.
+
+## Libraries
+
+Below I load the libraries necessary for this analysis
+
+```{r, message=FALSE}
+library(httr2)
+library(tidyverse)
+library(data.table)
+library(RCurl)
+library(rvest)
+library(tidytext)
+library(XML)
+```
+
+## Obtaining URLs from EDGAR API
+
+The first step in this analysis is to obtain the URLs that lead to each filing of Form 10-K for Nvidia from the SEC EDGAR database via its API.
+
+As detailed at the [following link,](https://www.sec.gov/edgar/sec-api-documentation) a company's filings are available via API via the following URL, which incorporates a unique CIK number for each company:
+
+-   <https://data.sec.gov/submissions/CIK>**\##########**.json
+
+Nvidia's CIK is 1045810
+
+Below I send a request to the API and receive a JSON object
+
+```{r}
+request_url <- 'https://data.sec.gov/submissions/CIK0001045810.json'
+
+
+apiResponse <- request(request_url) |> req_user_agent('semyon.toybis43@spsmail.cuny.edu') |>
+  req_perform()
+
+summary(apiResponse)
+
+```
+
+I extract the body from this JSON response and look at the list for filings
+
+```{r}
+nvdaList <- apiResponse |> resp_body_json()
+
+
+summary(nvdaList$filings$recent)
+```
+
+The accessionNumber and primaryDocument can be used to build a URL to access a specific Form 10-K, which will be demonstrated later. For now, I save this information into a data frame.
+
+```{r}
+nvdaForms <- nvdaList$filings$recent
+
+formsDF <- do.call(rbind.data.frame, nvdaForms)
+
+formsDFTranspose <- transpose(formsDF)
+
+colnames(formsDFTranspose) <- rownames(formsDF)
+
+remove(formsDF)
+
+formsDFTranspose <- formsDFTranspose |> filter(form == '10-K')
+
+head(formsDFTranspose)
+```
+
+This data frame is in tidy format: each row is an observation, which in this case is a form filed by Nvidia, and each column is a variable related to the forms. However, this is not the final data frame I need.
+
+## Creating the URLs for each 10-K filing
+
+By viewing the 10-Ks online I saw that each 10-K for Nvidia had the following base URL:
+
+<https://www.sec.gov/Archives/edgar/data/1045810/>
+
+Then, this base URL incorporated the accessionNumber (without dashes) followed by a slash, followed by the primaryDocument.
+
+For example, the 10-K filed in 2024 is at the following URL:
+
+<https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm>
+
+Thus, I add a column to the data frame that mentioned above that combines the baseURL with the other fields to create the URL for each Form 10-K
+
+```{r}
+baseURL <- 'https://www.sec.gov/Archives/edgar/data/1045810/'
+
+formsDFTranspose$nvda10KURLs <- paste(baseURL, str_replace_all(formsDFTranspose$accessionNumber,'-',''), '/',formsDFTranspose$primaryDocument, sep = '')
+
+```
+
+I then create a subset data frame that has the columns relevant to my analysis and convert the date field from string to date format
+
+```{r}
+finalDF <- formsDFTranspose |> select(reportDate, nvda10KURLs)
+
+finalDF$reportDate <- as.Date(finalDF$reportDate, '%Y-%m-%d')
+
+finalDF
+```
+
+## Creating a function that will scrape the 10-K and return a sentiment score
+
+The URL's above take us to an html webpage that has the Form 10-K for Nvidia for each year it was filed.
+
+Because I have ten different 10-K's I created a function that would scrape each one for Item 7 commentary and return the sentiment score, rather than scrape each one individually. Below is the code for the function, with comments explaining the code
+
+```{r}
+sentimentFromURL <- function(urlFor10K){
+  
+  #I want to return two values: the date of the filing and the sentiment score
+  #thus I create the returnDF which will be populated with these two values
+  returnDF <- data.frame(reportDate = character(), sentiment = integer())
+  
+  #use httr2 package to request the URL from the API
+  nvda10kResponse <- request(urlFor10K) |>
+    req_user_agent('semyon.toybis43@spsmail.cuny.edu') |>
+    req_perform()
+  
+  #this returned a httr2 response
+  #I use the resp_body_string to extract the body from the response
+  nvda10KContent <-  resp_body_string(nvda10kResponse)
+  
+  #I now have a string that has html formatting
+  #I use the read_html function form rvest package to convert it to html
+  page_content <- read_html(nvda10KContent)
+  
+  #next I extract the body from the html content
+  body_content <- html_element(page_content, "body")
+  
+  #I then extract the text from the body content
+  body_text <- html_text(body_content)
+  
+  #the body text has the text information from the filing
+  #I use the stringr package to pull certain information
+  
+  #First I extract the reportDate
+  #which I know starts with the phrase below and has a consistent length
+  year <- str_sub(body_text, str_locate_all(body_text, 'For the fiscal year ended')[[1]][1,2]+1, str_locate_all(body_text, 'For the fiscal year ended')[[1]][1,2]+17)
+  year <- str_squish(year)
+  
+  
+  #Next I search for the location of the phrase Item 7 in the body
+  item7Appearances <- str_locate_all(body_text, 'Item 7')
+  
+  #Item 7 appears twice in the table of contents - Item 7 and 7A
+  #The third appearance should be the start of the actual commentary
+  #I grab the starting position for the third appearance
+  subsetStartLocation <- item7Appearances[[1]][3]
+  
+  #now I need to find where item 8 starts. I will use this as the endpoint for my extraction
+  
+  #For some reason, Item 8 was only being picked up once (table of contents).
+  #Instead, I searched the content of item 8, which was consistent year over year
+  item8ContentAppearances <- str_locate_all(body_text, 'The information required by this Item is set forth in our Consolidated Financial Statements and Notes thereto included in this Annual Report on Form 10-K')
+  subsetEndLocation <-  item8ContentAppearances[[1]][1]
+  
+  #Now I have the start and end point for Item 7
+  #Below I extract the Item 7 commentary from the whole body of the 10k
+  item7Commentary <- str_sub(body_text, subsetStartLocation, subsetEndLocation)
+  
+  
+  #Now that I have the Item 7 text, I need to get it into tidy text format
+  #first, I put the text into a tibble
+  item7Tibble <- tibble(line = 1, text = item7Commentary)
+  
+  #then I use the tidytext library to unnest the tokens
+  item7TidyText <- item7Tibble |> unnest_tokens(word, text)
+  
+  #I then drop the last 7 rows because this is the portion of commentary from item 8
+  #this is because my end point included the begining of item 8
+  item7TidyText <- item7TidyText[1:(nrow(item7TidyText)-7), ]
+  
+  #I now have a dataframe that is in tidy-text format
+  
+  #Now I can begin the sentiment analsis
+  #First I remove stop words
+  item7TidyText <- item7TidyText |> anti_join(stop_words)
+  
+  #I use the Loughran sentiment lexicon which is meant specifically for financial reports
+  #I perform an inner join of the item 7 commentary with words in the lexicon
+  item7Sentiment <- item7TidyText |> inner_join(get_sentiments('loughran'))
+  
+  #The lexicon categorizes words as: positive, negative, litigious, uncertain,
+  #constraining, and superfluous
+  
+  #I will perform a simple sentiment analysis that evaluates the amount of positive
+  #and negative words
+  #I filter the data frame for words that fall into these two categories
+  item7Sentiment <- item7Sentiment |> filter(sentiment == 'negative' | sentiment == 'positive')
+  
+  #below I have the count of the amount of positive and negative words
+  item7SentimentTable <- item7Sentiment |> group_by(sentiment) |> count()
+  
+  #I create a sentiment ratio that subtracts the count of negative words from the
+  #count of positive words and divides it by the sum of the count of negative
+  #and positive words
+  item7SentimentScore <- (item7SentimentTable[2,2] - item7SentimentTable[1,2])/ (item7SentimentTable[2,2] + item7SentimentTable[1,2])
+  
+  #I populate the dataframe with the reportDate and sentiment score and return the dataframe
+  returnDF[1, ] <-c(year, item7SentimentScore)
+  
+  return(returnDF)
+}
+```
+
+## Using the function to obtain sentiment scores
+
+Now that I have the function, below I use it to obtain the sentiment scores for the ten Form 10-K's
+
+I use the lapply function, which returns a list of ten that has the reportDate and sentimentScore for each 10-K
+
+```{r, warning=FALSE}
+nvidia10KSentimentScores <- lapply(finalDF$nvda10KURLs, sentimentFromURL)
+```
+
+I convert this list to a data frame and convert the dates from string format to date
+
+```{r}
+nvidia10KSentimentScoresDF <- do.call(rbind.data.frame, nvidia10KSentimentScores)
+nvidia10KSentimentScoresDF$reportDate <- as.Date(nvidia10KSentimentScoresDF$reportDate, '%B %d, %Y')
+
+head(nvidia10KSentimentScoresDF, n = 10)
+```
+
+## Adding in dates for stock price analysis
+
+I join the above data frame values to my finalDF on which I will conduct analysis.
+
+```{r}
+finalDF <- left_join(finalDF, nvidia10KSentimentScoresDF, by = 'reportDate')
+
+head(finalDF, n = 10)
+```
+
+First, I check which day of the week the reportDate is:
+
+```{r}
+weekdays(finalDF$reportDate)
+```
+
+Because these are all weekends, there will not be any stock price information for these days. Thus, I take the Friday before the reportDate as the period start date for the analysis of change in stock price.
+
+```{r}
+finalDF$periodStartDate <- finalDF$reportDate - days(2)
+```
+
+I want to see the change in stock price for the following year, so I need the end date that is a year from the start date.
+
+```{r}
+finalDF$periodStartDate <- finalDF$reportDate - days(2)
+finalDF$startPlusOneYear <- finalDF$periodStartDate + years(1)
+weekdays(finalDF$startPlusOneYear)
+```
+
+Because these are all weekends, I want to take the stock price from the Friday before this date. I do this below:
+
+```{r}
+finalDF <- finalDF |> mutate(forwardPeriodEndDate = case_when(
+  weekdays(finalDF$startPlusOneYear) == 'Sunday' ~ finalDF$periodStartDate + years(1) - days(2),
+  weekdays(finalDF$startPlusOneYear) == 'Saturday' ~ finalDF$periodStartDate + years(1) - days(1),
+))
+
+finalDF$startPlusOneYear <- NULL
+```
+
+## Adding in stock price information
+
+First, I import a csv file from my Github that has the daily stock price values for Nvidia. I convert the date column from string to date format
+
+```{r}
+
+nvdaFileUrl <- 'https://raw.githubusercontent.com/stoybis/DATA607Repo/main/FinalProject/NVDA.csv'
+
+nvdaPrices <- read_csv(nvdaFileUrl)
+
+nvdaPrices$Date <- as.Date(nvdaPrices$Date, '%Y-%m-%d')
+
+head(nvdaPrices)
+```
+
+Next, I join the the adjusted closing price from the above file to my final data frame for the period start date.
+
+```{r}
+finalDF <- left_join(finalDF, select(nvdaPrices, Date, 'Adj Close'), join_by(periodStartDate == Date))
+
+colnames(finalDF)[colnames(finalDF) == 'Adj Close'] <- 'startPrice'
+
+head(finalDF, n = 10)
+```
+
+Next, I do the same step as above but for the period ending price.
+
+```{r}
+finalDF <- left_join(finalDF, select(nvdaPrices, Date, 'Adj Close'), join_by(forwardPeriodEndDate == Date))
+colnames(finalDF)[colnames(finalDF) == 'Adj Close'] <- 'endPrice'
+
+head(finalDF, n = 10)
+```
+
+Note that the forward price a year from now is not yet available.
+
+Last, I calculate the percent change for the period.
+
+```{r}
+finalDF$stockPricePercentChangeOneYearFwd <- (finalDF$endPrice - finalDF$startPrice)/finalDF$startPrice
+
+head(finalDF, n = 10)
+```
+
+I now have a tidy data frame where each row is an observation and each column is an attribute of the observation:
+
+-   the observations (rows) is Nvidia in different points in time (reporting dates)
+
+-   the attributes (columns) are the report date of the 10-K, the URL for the 10-K, the sentiment score for that 10-K, the start and end date for the forward periods, the stock prices for each period, and the percent change in stock price
+
+## Visualization and analysis
+
+Below I visualize the relationship between the sentiment score and the stock price change for the following year using a scatter plot. I add in a trend line via a linear model.
+
+```{r}
+
+plotTitle <- 'Relationship betweebw sentiment score of 10-K Item 7 Commentary & Change in Stock Price One Year Forward for Nvidia'
+
+ggplot(finalDF, aes(x = sentiment, y = stockPricePercentChangeOneYearFwd)) + geom_point() + geom_smooth(method = 'lm', se = FALSE) +
+  labs(title = str_wrap(plotTitle, 60)) +
+  theme(plot.title = element_text(size=12)) + 
+  scale_y_continuous(labels = scales::percent_format()) +
+  scale_x_continuous(labels = scales::percent_format())
+```
+
+It seems like there is a negative relationship between the sentiment score of management commentary and forward stock price performance. Below, I conduct a correlation test.
+
+```{r}
+cor.test(finalDF$sentiment, finalDF$stockPricePercentChangeOneYearFwd)
+```
+
+The correlation is negative, however based on the p-value we fail to reject the null hypothesis that the correlation between the two variables is zero. However, it is important to note that the sample size is small, there is one point that is an outlier, and the relationship between sentiment score and stock price performance may not be a linear one.
+
+Below I examine how the sentiment of the 10-K's has evolved over time
+
+```{r}
+ggplot(finalDF, aes(x = reportDate, y = sentiment)) + geom_line() +
+  geom_hline(yintercept=0) + 
+  scale_y_continuous(labels = scales::percent_format()) +
+  ggtitle('10-K Sentiment score over time')
+```
+
+Interestingly, while sentiment still is negative overall, it has gotten less negative over time.
+
+## Conclusion/Future analysis
+
+I was surprised to see that the sentiment score of the 10-Ks in the sample was mostly negative. It is possible that management tends to take a precautionary approach in Item 7 commentary, as being overly optimistic about the outlook but then failing to deliver could reflect poorly on management while outperforming reflects strongly. This type of bias could naturally skew commentary towards a more negative sentiment.
+
+Regarding whether there is a positive relationship between sentiment score and forward stock price performance, while the chart above suggests the relationship is negative, there is not enough data to say whether this is truly the case. Furthermore, Nvidia has seen mostly positive stock price performance over this period whereas a stock that had mixed performance might have a different relationship with the sentiment score of commentary. Additionally, there are many other factors that drive stock price performance so it is important to remember that correlation does not equal causation.
+
+For future analysis, it would be interesting to expand the sample size to include more Forms 10-K. However, because there are a lot of variables that can drive stock price performance over a one year period, it could be interesting to analyze performance over a shorter period such as the day before the 10-K was released and the day of. Additionally, Form 10-Q is filed quarterly and could be included for analysis as well. Lastly, analyzing daily data such as social media posts or news articles about the company for sentiment scores will lead to more sentiment data that can be used with daily stock price data for even more granular analysis.
